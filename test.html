@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scroll Animation Test</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #fff; font-family: sans-serif; }
+
+/* Debug info fixed at top */
+#debug {
+  position: fixed; top: 10px; left: 10px; z-index: 9999;
+  background: rgba(0,0,0,0.8); color: #0f0; padding: 10px 16px;
+  font-family: monospace; font-size: 14px; border-radius: 8px;
+  line-height: 1.6;
+}
+
+/* Hero placeholder */
+.hero {
+  height: 100vh; display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: #333; background: #f0f7fd;
+}
+
+/* THE SCROLL ANIMATION */
+.scroll-section {
+  position: relative;
+  height: 500vh;
+}
+.scroll-section canvas {
+  position: sticky;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+/* Content after */
+.after {
+  height: 100vh; display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: #333; background: #f0f7fd;
+}
+</style>
+</head>
+<body>
+
+<div id="debug">Loading frames...</div>
+
+<div class="hero">Scroll down to see the animation ↓</div>
+
+<section class="scroll-section" id="section">
+  <canvas id="canvas"></canvas>
+</section>
+
+<div class="after">Animation complete! ↑ Scroll back up to reverse</div>
+
+<script>
+const TOTAL = 141;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const section = document.getElementById('section');
+const debug = document.getElementById('debug');
+const frames = [];
+let loaded = 0;
+let targetFrame = 0;
+let currentFrame = 0;
+let lastDrawn = -1;
+let animRunning = false;
+
+// 1. Size canvas for retina
+function sizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  lastDrawn = -1;
+}
+
+// 2. Draw a single frame
+function draw(idx) {
+  idx = Math.max(0, Math.min(TOTAL - 1, Math.round(idx)));
+  if (idx === lastDrawn) return;
+  lastDrawn = idx;
+  const img = frames[idx];
+  if (!img || !img.naturalWidth) return;
+
+  const w = window.innerWidth, h = window.innerHeight;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+
+  const s = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
+  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+// 3. Lerp animation loop
+function tick() {
+  currentFrame += (targetFrame - currentFrame) * 0.15;
+  if (Math.abs(currentFrame - targetFrame) < 0.5) currentFrame = targetFrame;
+  draw(currentFrame);
+
+  // Update debug
+  const rect = section.getBoundingClientRect();
+  const progress = Math.max(0, Math.min(1, -rect.top / (rect.height - window.innerHeight)));
+  debug.textContent =
+    'Frame: ' + Math.round(currentFrame) + '/' + TOTAL +
+    ' | Progress: ' + (progress * 100).toFixed(1) + '%' +
+    ' | Section top: ' + Math.round(rect.top) + 'px' +
+    ' | Loaded: ' + loaded + '/' + TOTAL;
+
+  if (Math.abs(currentFrame - targetFrame) > 0.01) {
+    requestAnimationFrame(tick);
+  } else {
+    animRunning = false;
+  }
+}
+
+function startAnim() {
+  if (!animRunning) { animRunning = true; requestAnimationFrame(tick); }
+}
+
+// 4. Scroll handler
+function onScroll() {
+  const rect = section.getBoundingClientRect();
+  const progress = Math.max(0, Math.min(1, -rect.top / (rect.height - window.innerHeight)));
+  targetFrame = progress * (TOTAL - 1);
+  startAnim();
+}
+
+// 5. Preload
+for (let i = 0; i < TOTAL; i++) {
+  const img = new Image();
+  img.onload = () => {
+    loaded++;
+    debug.textContent = 'Loading: ' + loaded + '/' + TOTAL;
+    if (loaded === TOTAL) {
+      debug.textContent = 'Ready! Scroll to animate.';
+      sizeCanvas();
+      draw(0);
+      onScroll();
+    }
+  };
+  img.onerror = () => {
+    loaded++;
+    debug.textContent = 'ERROR loading frame ' + (i+1) + ' (' + loaded + '/' + TOTAL + ')';
+  };
+  img.src = 'frames/frame_' + String(i + 1).padStart(4, '0') + '.jpg';
+  frames[i] = img;
+}
+
+window.addEventListener('scroll', onScroll, { passive: true });
+window.addEventListener('resize', () => { sizeCanvas(); lastDrawn = -1; draw(currentFrame); });
+</script>
+</body>
+</html>
